@@ -18,7 +18,7 @@ void set_sigaction(struct sigaction *act, void (*signal_handler)(int signum, sig
 	bzero(act, sizeof(*act));
 	sigemptyset(&(act->sa_mask));
 	sigaddset(&(act->sa_mask), SIGINT);
-	act->sa_flags = SA_SIGINfO;
+	act->sa_flags = SA_SIGINFO;
 	act->sa_sigaction = signal_handler;
 	sigaction(SIGINT, act, NULL);
 }
@@ -62,7 +62,7 @@ int main(void) {
 	memset(&hook, 0, sizeof(hook));
 	hook.sz = sizeof(hook);
 	hook.ifindex = ifindex;
-	hook.attach_point = BPf_TC_EGRESS;
+	hook.attach_point = BPF_TC_EGRESS;
 	
 	if (bpf_tc_hook_create(&hook)) {
 		fprintf(stderr, "failed to create tc hook\n");
@@ -87,9 +87,30 @@ int main(void) {
 	
 	set_sigaction(&act, signal_handler);
 
+	struct bpf_map *map = bpf_object__find_map_by_name(obj, "domain_cnt");
+	int map_fd = bpf_map__fd(map);
 	while (!stopflg)
 	{
-		write(2, "...", 3);
+		char prev_key[255] = {0};
+		char cur_key[255] = {0};
+		write(2, "=====\n", 6);
+		while (1)
+		{
+			int err;
+			if (prev_key[0] == 0)
+				err = bpf_map_get_next_key(map_fd, NULL, &cur_key);
+			else
+				err = bpf_map_get_next_key(map_fd, &prev_key, &cur_key);
+			if (err)
+				break;
+
+			int value = 0;
+			err = bpf_map_lookup_elem(map_fd, &cur_key, &value);
+			if (err == 0) {
+				printf("%s=%d\n", cur_key, value);
+			}
+			memcpy(prev_key, cur_key, 255);
+		}
 		sleep(2);
 	}
 	
@@ -102,7 +123,7 @@ int main(void) {
 		printf("dns monitor detached\n");
 	}
 
-	hook.attach_point = BPf_TC_INGRESS|BPf_TC_EGRESS;
+	hook.attach_point = BPF_TC_INGRESS|BPF_TC_EGRESS;
 	if (bpf_tc_hook_destroy(&hook)) {
 		perror("bpf_tc_hook_destroy");
 		fprintf(stderr, "failed to destroy tc hook\n");

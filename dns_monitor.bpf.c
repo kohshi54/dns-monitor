@@ -8,6 +8,13 @@
 
 #define DOMAIN_OFFSET 12
 
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__type(key, char[255]);
+	__type(value, int);
+	__uint(max_entries, 255);
+} domain_cnt SEC(".maps");
+
 static __always_inline unsigned short is_dns_request(void *data, void *data_end)
 {
 	struct ethhdr *eth = data;	
@@ -83,6 +90,15 @@ int dns_monitor(struct __sk_buff *skb) {
 		bpf_printk("%c", domain[j]);
 	}
 	
+	int *cnt = bpf_map_lookup_elem(&domain_cnt, domain);
+	if (cnt) {
+		(*cnt)++;
+		bpf_map_update_elem(&domain_cnt, domain, cnt, BPF_EXIST);
+	} else {
+		int tmp = 1;
+		bpf_map_update_elem(&domain_cnt, domain, &tmp, BPF_NOEXIST);
+	}
+
 	return TC_ACT_OK;
 }
 

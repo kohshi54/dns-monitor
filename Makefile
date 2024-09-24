@@ -41,5 +41,5 @@ user: dns_monitor.bpf.o dns_monitor
 	sudo ./dns_monitor
 
 dns_monitor: dns_monitor.c dns_monitor.bpf.o
-	gcc -O2 -g -Wall -I/usr/include -o dns_monitor dns_monitor.c -lbpf -lelf -lz
+	gcc -O2 -fsanitize=address -g -Wall -I/usr/include -o dns_monitor dns_monitor.c -lbpf -lelf -lz
 
